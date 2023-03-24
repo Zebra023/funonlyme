@@ -1,0 +1,644 @@
+ветствии со схемой.
+RTR-L
+en
+conf t
+hostname RTR-L
+do wr
+RTR-R
+en
+conf t
+hostname RTR-R
+do wr
+SRV
+Rename-Computer -NewName SRV
+WEB-L
+hostnamectl set-hostname WEB-L
+WEB-R
+hostnamectl set-hostname WEB-R
+ISP
+hostnamectl set-hostname ISP
+CLI
+Rename-Computer -NewName CLI
+3. Адресация должна быть выполнена в соответствии с Таблицей 1
+RTR-L
+int gi 1
+ip address 4.4.4.100 255.255.255.0
+no sh
+int gi 2
+ip address 192.168.100.254 255.255.255.0
+no sh
+end
+wr
+RTR-R
+int gi 1
+ip address 5.5.5.100 255.255.255.0
+no sh
+int gi 2
+ip address 172.16.100.254 255.255.255.0
+no sh
+end
+wr
+SRV
+$GetIndex = Get-NetAdapter
+New-NetIPAddress -InterfaceIndex $GetIndex.ifIndex -IPAddress 192.168.100.200 -
+PrefixLength 24 -DefaultGateway 192.168.100.254
+Set-DnsClientServerAddress -InterfaceIndex $GetIndex.ifIndex -ServerAddresses
+("192.168.100.200","4.4.4.1")
+Set-NetFirewallRule -DisplayGroup "File And Printer Sharing" -Enabled True -Profile
+Any
+WEB-L
+apt-cdrom add
+apt install -y network-manager
+nmcli connection show
+nmcli connection modify Wired\ connection\ 1 conn.autoconnect yes conn.interfacename ens192 ipv4.method manual ipv4.addresses '192.168.100.100/24' ipv4.dns
+192.168.100.200 ipv4.gateway 192.168.100.254
+WEB-R
+apt-cdrom add
+apt install -y network-manager
+nmcli connection show
+nmcli connection modify Wired\ connection\ 1 conn.autoconnect yes conn.interfacename ens192 ipv4.method manual ipv4.addresses '172.16.100.100/24' ipv4.dns 192.168.100.200
+ipv4.gateway 172.16.100.254
+ISP
+apt-cdrom add
+apt install -y network-manager bind9 chrony
+nmcli connection show
+nmcli connection modify Wired\ connection\ 1 conn.autoconnect yes conn.interfacename ens192 ipv4.method manual ipv4.addresses '3.3.3.1/24'
+nmcli connection modify Wired\ connection\ 2 conn.autoconnect yes conn.interfacename ens224 ipv4.method manual ipv4.addresses '4.4.4.1/24'
+nmcli connection modify Wired\ connection\ 3 conn.autoconnect yes conn.interfacename ens256 ipv4.method manual ipv4.addresses '5.5.5.1/24'
+CLI
+$GetIndex = Get-NetAdapter
+New-NetIPAddress -InterfaceIndex $GetIndex.ifIndex -IPAddress 3.3.3.10 -
+PrefixLength 24 -DefaultGateway 3.3.3.1
+Set-DnsClientServerAddress -InterfaceIndex $GetIndex.ifIndex -ServerAddresses
+("3.3.3.1")
+Сетевая связность.
+В рамках данного модуля требуется обеспечить сетевую связность
+между регионами работы приложения, а также обеспечить выход ВМ в
+имитируемую сеть “Интернет”
+1. Сети, подключенные к ISP, считаются внешними:
+o Запрещено прямое попадание трафика из внутренних сетей во
+внешние и наоборот;
+2. Платформы контроля трафика, установленные на границах регионов,
+должны выполнять трансляцию трафика, идущего из соответствующих
+внутренних сетей во внешние сети стенда и в сеть Интернет.
+o Трансляция исходящих адресов производится в адрес
+платформы,расположенный во внешней сети.
+3. Между платформами должен быть установлен защищенный туннель,
+позволяющий осуществлять связь между регионами с применением внутренних
+адресов.
+o Трафик, проходящий по данному туннелю, должен быть защищен:
+▪ Платформа ISP не должна иметь возможности просматривать
+содержимое пакетов, идущих из одной внутренней сети в другую.
+o Туннель должен позволять защищенное взаимодействие между
+платформами управления трафиком по их внутренним адресам
+▪ Взаимодействие по внешним адресам должно происходит без
+применения туннеля и шифрования
+o Трафик, идущий по туннелю между регионами по внутренним
+адресам, не должен транслироваться.
+4. Платформа управления трафиком RTR-L выполняет контроль
+входящего трафика согласно следующим правилам:
+o Разрешаются подключения к портам DNS, HTTP и HTTPS для всех
+клиентов;
+▪ Порты необходимо для работы настраиваемых служб
+o Разрешается работа выбранного протокола организации защищенной
+связи;
+▪ Разрешение портов должно быть выполнено по принципу
+“необходимо и достаточно”
+o Разрешается работа протоколов ICMP;
+o Разрешается работа протокола SSH;
+o Прочие подключения запрещены;
+o Для обращений в платформам со стороны хостов, находящихся
+внутри регионов, ограничений быть не должно;
+5. Платформа управления трафиком RTR-R выполняет контроль
+входящего трафика согласно следующим правилам:
+o Разрешаются подключения к портам HTTP и HTTPS для всех
+клиентов;
+▪ Порты необходимо для работы настраиваемых служб
+o Разрешается работа выбранного протокола организации защищенной
+связи;
+▪ Разрешение портов должно быть выполнено по принципу
+необходимо и достаточно”
+o Разрешается работа протоколов ICMP;
+o Разрешается работа протокола SSH;
+o Прочие подключения запрещены;
+o Для обращений в платформам со стороны хостов, находящихся
+внутри регионов, ограничений быть не должно;
+6. Обеспечьте настройку служб SSH региона Left и Right:
+o Подключения со стороны внешних сетей по протоколу к платформе
+управления трафиком RTR-L на порт 2222 должны быть перенаправлены на ВМ
+Web-L;
+o Подключения со стороны внешних сетей по протоколу к платформе
+управления трафиком RTR-R на порт 2244 должны быть перенаправлены на ВМ
+Web-R;
+1. Сети, подключенные к ISP, считаются внешними:
+ISP forward
+nano /etc/sysctl.conf
+net.ipv4.ip_forward=1
+sysctl -p
+RTR-L Gitw
+ip route 0.0.0.0 0.0.0.0 4.4.4.1
+RTR-R gitw
+ip route 0.0.0.0 0.0.0.0 5.5.5.1
+2. Платформы контроля трафика, установленные на границах
+регионов, должны выполнять трансляцию трафика, идущего из
+соответствующих внутренних сетей во внешние сети стенда и в сеть
+Интернет.
+RTR-L NAT
+на внутр. интерфейсе - ip nat inside
+на внешн. интерфейсе - ip nat outside
+int gi 1
+ip nat outside
+!
+int gi 2
+ip nat inside
+!
+access-list 1 permit 192.168.100.0 0.0.0.255
+ip nat inside source list 1 interface Gi1 overload
+RTR-R NAT
+int gi 1
+ip nat outside
+!
+int gi 2
+ip nat inside
+!
+access-list 1 permit 172.16.100.0 0.0.0.255
+ip nat inside source list 1 interface Gi1 overload
+3. Между платформами должен быть установлен защищенный туннель,
+позволяющий осуществлять связь между регионами с применением
+внутренних адресов.
+RTR-L GRE
+interface Tunne 1
+ip address 172.16.1.1 255.255.255.0
+tunnel mode gre ip
+tunnel source 4.4.4.100
+tunnel destination 5.5.5.100
+router eigrp 6500
+network 192.168.100.0 0.0.0.255
+network 172.16.1.0 0.0.0.255
+RTR-R
+interface Tunne 1
+ip address 172.16.1.2 255.255.255.0
+tunnel mode gre ip
+tunnel source 5.5.5.100
+tunnel destination 4.4.4.100
+router eigrp 6500
+network 172.16.100.0 0.0.0.255
+network 172.16.1.0 0.0.0.255
+RTR-L
+crypto isakmp policy 1
+encr aes
+authentication pre-share
+hash sha256
+group 14
+!
+crypto isakmp key TheSecretMustBeAtLeast13bytes address 5.5.5.100
+crypto isakmp nat keepalive 5
+!
+crypto ipsec transform-set TSET esp-aes 256 esp-sha256-hmac
+mode tunnel
+!
+crypto ipsec profile VTI
+set transform-set TSET
+interface Tunnel1
+tunnel mode ipsec ipv4
+tunnel protection ipsec profile VTI
+RTR-R
+conf t
+crypto isakmp policy 1
+encr aes
+authentication pre-share
+hash sha256
+group 14
+!
+crypto isakmp key TheSecretMustBeAtLeast13bytes address 4.4.4.100
+crypto isakmp nat keepalive 5
+!
+crypto ipsec transform-set TSET esp-aes 256 esp-sha256-hmac
+mode tunnel
+!
+crypto ipsec profile VTI
+set transform-set TSET
+interface Tunnel1
+tunnel mode ipsec ipv4
+tunnel protection ipsec profile VTI
+4. Платформа управления трафиком RTR-L выполняет контроль
+входящего трафика согласно следующим правилам:
+RTR-L ACL
+ip access-list extended Lnew
+permit tcp any any established
+permit udp host 4.4.4.100 eq 53 any
+permit udp host 5.5.5.1 eq 123 any
+permit tcp any host 4.4.4.100 eq 80
+permit tcp any host 4.4.4.100 eq 443
+permit tcp any host 4.4.4.100 eq 2222
+permit udp host 5.5.5.100 host 4.4.4.100 eq 500
+permit esp any any
+permit icmp any any
+int gi 1
+ip access-group Lnew in
+5. Платформа управления трафиком RTR-R выполняет контроль
+входящего трафика согласно следующим правилам:
+RTR-R ACL
+ip access-list extended Rnew
+permit tcp any any established
+permit tcp any host 5.5.5.100 eq 80
+permit tcp any host 5.5.5.100 eq 443
+permit tcp any host 5.5.5.100 eq 2244
+permit udp host 4.4.4.100 host 5.5.5.100 eq 500
+permit esp any any
+permit icmp any any
+int gi 1
+ip access-group Rnew in
+6. Обеспечьте настройку служб SSH региона Left
+RTR-L SSH
+ip nat inside source static tcp 192.168.100.100 22 4.4.4.100 2222
+RTR-R SSH
+ip nat inside source static tcp 172.16.100.100 22 5.5.5.100 2244
+SSH WEB-L
+apt-cdrom add
+apt install -y openssh-server ssh
+systemctl start sshd
+systemctl enable ssh
+SSH WEB-R
+apt-cdrom add
+apt install -y openssh-server ssh
+systemctl start sshd
+systemctl enable ssh
+Инфраструктурные службы
+В рамках данного модуля необходимо настроить основные
+инфраструктурные службы и настроить представленные ВМ на применение этих
+служб для всех основных функций.
+1. Выполните настройку первого уровня DNS-системы стенда:
+o Используется ВМ ISP;
+o Обслуживается зона demo.wsr
+▪ Наполнение зоны должно быть реализовано в соответствии с
+Таблицей 2;
+o Сервер делегирует зону int.demo.wsr на SRV;
+▪ Поскольку SRV находится во внутренней сети западного
+региона, делегирование происходит на внешний адрес маршрутизатора данного
+региона.
+▪ Маршрутизатор региона должен транслировать
+соответствующие порты DNS-службы в порты сервера SRV
+o Внешний клиент CLI должен использовать DNS-службу, развернутую
+на ISP, по умолчанию;
+2. Выполните настройку второго уровня DNS-системы стенда;
+o Используется ВМ SRV;
+o Обслуживается зона int.demo.wsr;
+▪ Наполнение зоны должно быть реализовано в соответствии с
+Таблицей 2;
+o Обслуживаются обратные зоны для внутренних адресов регионов
+▪ Имена для разрешения обратных записей следует брать из
+Таблицы 2;
+o Сервер принимает рекурсивные запросы, исходящие от адресов
+внутренних регионов;
+▪ Обслуживание клиентов(внешних и внутренних),
+обращающихся к к зоне int.demo.wsr, должно производится без каких либо
+ограничений по адресу источника;
+o Внутренние хосты регионов (равно как и платформы управления
+трафиком) должны использовать данную DNS-службу для разрешения всех
+запросов имен;
+3. Выполните настройку первого уровня системы синхронизации
+времени:
+o Используется сервер ISP.
+o Сервер считает собственный источник времени верным, stratum=4;
+o Сервер допускает подключение только через внешний адрес
+соответствующей платформы управления трафиком;
+▪ Подразумевается обращение SRV для синхронизации времени;
+o Клиент CLI должен использовать службу времени ISP;
+4. Выполните конфигурацию службы второго уровня времени на SRV
+o Сервер синхронизирует время с хостом ISP;
+▪ Синхронизация с другими источникам запрещена;
+o Сервер должен допускать обращения внутренних хостов регионов, в
+том числе и платформ управления трафиком, для синхронизации времени;
+o Все внутренние хосты(в том числе и платформы управления
+трафиком) должны синхронизировать свое время с SRV;
+5. Реализуйте файловый SMB-сервер на базе SRV
+o Сервер должен предоставлять доступ для обмена файлами серверам
+WEB-L и WEB-R;
+o Сервер, в зависимости от ОС, использует следующие каталоги для
+хранения файлов:
+▪ /mnt/storage для система на базе Linux;
+▪ Диск R:\ для систем на базе Windows;
+o Хранение файлов осуществляется на диске (смонтированном по
+указанным выше адресам), реализованном по технологии RAID типа “Зеркало”;
+6. Сервера WEB-L и WEB-R должны использовать службу, настроенную
+на SRV, для обмена файлами между собой:
+o Служба файлового обмена должна позволять монтирование в виде
+стандартного каталога Linux
+▪ Разделяемый каталог должен быть смонтирован по адресу
+/opt/share;
+o Каталог должен позволять удалять и создавать файлы в нем для всех
+пользователей;
+7. Выполните настройку центра сертификации на базе SRV:
+o В случае применения решения на базе Linux используется центр
+сертификации типа OpenSSL и располагается по адресу /var/ca
+o Выдаваемые сертификаты должны иметь срок жизни не менее 500
+дней;
+o Параметры выдаваемых сертификатов:
+▪ Страна RU;
+▪ Организация DEMO.WSR;
+▪ Прочие поля (за исключением CN) должны быть пусты;
+Таблица 2. DNS-записи зон
+ISP
+apt-cdrom add
+apt install -y bind9
+mkdir /opt/dns
+cp /etc/bind/db.local /opt/dns/demo.db
+chown -R bind:bind /opt/dns
+nano /etc/apparmor.d/usr.sbin.named
+
+/opt/dns/** rw,
+systemctl restart apparmor.service
+
+nano /etc/bind/named.conf.options
+nano /etc/bind/named.conf.default-zones
+zone "demo.wsr" {
+ type master;
+ allow-transfer { any; };
+ file "/opt/dns/demo.db";
+};
+nano /opt/dns/demo.db
+@ IN SOA demo.wsr. root.demo.wsr.(
+@ IN NS isp.demo.wsr.
+isp IN A 3.3.3.1
+www IN A 4.4.4.100
+www IN A 5.5.5.100
+internet CNAME isp.demo.wsr.
+int IN NS rtr-l.demo.wsr.
+rtr-l IN A 4.4.4.100
+systemctl restart bind9
+RTR-L
+b. Маршрутизатор региона должен транслировать соответствующие порты
+DNS-службы в порты сервера SRV.
+ip nat inside source static tcp 192.168.100.200 53 4.4.4.100 53
+!
+ip nat inside source static udp 192.168.100.200 53 4.4.4.100 53
+2. Выполните настройку второго уровня DNS-системы стенда
+SRV
+Install-WindowsFeature -Name DNS -IncludeManagementTools
+Add-DnsServerPrimaryZone -Name "int.demo.wsr" -ZoneFile "int.demo.wsr.dns"
+Add-DnsServerPrimaryZone -NetworkId 192.168.100.0/24 -ZoneFile "int.demo.wsr.dns"
+Add-DnsServerPrimaryZone -NetworkId 172.16.100.0/24 -ZoneFile "int.demo.wsr.dns"
+Zone Type Key Meaning
+int.demo.wsr A web-l 192.168.100.100
+A web-r 172.16.100.100
+A srv 192.168.100.200
+A rtr-l 192.168.100.254
+Zone Type Key Meaning
+A rtr-r 172.16.100.254
+CNAME webapp1 web-l
+CNAME webapp2 web-r
+CNAME ntp srv
+CNAME dns srv
+Add-DnsServerResourceRecordA -Name "web-l" -ZoneName "int.demo.wsr" -AllowUpdateAny -
+IPv4Address "192.168.100.100" -CreatePtr
+Add-DnsServerResourceRecordA -Name "web-r" -ZoneName "int.demo.wsr" -AllowUpdateAny -
+IPv4Address "172.16.100.100" -CreatePtr
+Add-DnsServerResourceRecordA -Name "srv" -ZoneName "int.demo.wsr" -AllowUpdateAny -
+IPv4Address "192.168.100.200" -CreatePtr
+Add-DnsServerResourceRecordA -Name "rtr-l" -ZoneName "int.demo.wsr" -AllowUpdateAny -
+IPv4Address "192.168.100.254" -CreatePtr
+Add-DnsServerResourceRecordA -Name "rtr-r" -ZoneName "int.demo.wsr" -AllowUpdateAny -
+IPv4Address "172.16.100.254" -CreatePtr
+Add-DnsServerResourceRecordCName -Name "webapp1" -HostNameAlias "web-l.int.demo.wsr" -
+ZoneName "int.demo.wsr"
+Add-DnsServerResourceRecordCName -Name "webapp2" -HostNameAlias "web-r.int.demo.wsr" -
+ZoneName "int.demo.wsr"
+Add-DnsServerResourceRecordCName -Name "ntp" -HostNameAlias "srv.int.demo.wsr" -ZoneName
+"int.demo.wsr"
+Add-DnsServerResourceRecordCName -Name "dns" -HostNameAlias "srv.int.demo.wsr" -ZoneName
+"int.demo.wsr"
+3. Выполните настройку первого уровня системы синхронизации
+времени:
+ISP NTP
+apt install -y chrony
+nano /etc/chrony/chrony.conf
+local stratum 4
+allow 4.4.4.0/24
+allow 3.3.3.0/24
+systemctl restart chronyd
+4. Выполните конфигурацию службы второго уровня времени на SRV
+SRV NTP
+New-NetFirewallRule -DisplayName "NTP" -Direction Inbound -LocalPort 123 -Protocol
+UDP -Action Allow
+w32tm /query /status
+Start-Service W32Time
+w32tm /config /manualpeerlist:4.4.4.1 /syncfromflags:manual /reliable:yes /update
+Restart-Service W32Time
+CLI NTP
+New-NetFirewallRule -DisplayName "NTP" -Direction Inbound -LocalPort 123 -Protocol
+UDP -Action Allow
+Start-Service W32Time
+w32tm /config /manualpeerlist:4.4.4.1 /syncfromflags:manual /reliable:yes /update
+Restart-Service W32Time
+Set-Service -Name W32Time -StartupType Automatic
+RTR-L NTP
+ip domain name int.demo.wsr
+ip name-server 192.168.100.200
+ntp server ntp.int.demo.wsr
+RTR-R NTP
+ip domain name int.demo.wsr
+ip name-server 192.168.100.200
+ntp server ntp.int.demo.wsr
+WEB-L NTP
+apt-cdrom add
+apt install -y chrony
+nano /etc/chrony/chrony.conf
+pool ntp.int.demo.wsr iburst
+allow 192.168.100.0/24
+systemctl restart chrony
+WEB-R NTP
+apt-cdrom add
+apt install -y chrony
+n
+ano /etc/chrony/chrony.conf
+pool ntp.int.demo.wsr iburst
+allow 192.168.100.0/24
+systemctl restart chrony
+5. Реализуйте файловый SMB-сервер на базе SRV
+SRV RAID1
+get-disk
+set-disk -Number 1 -IsOffline $false
+set-disk -Number 2 -IsOffline $false
+New-StoragePool -FriendlyName "POOLRAID1" -StorageSubsystemFriendlyName "Windows
+Storage*" -PhysicalDisks (Get-PhysicalDisk -CanPool $true)
+New-VirtualDisk -StoragePoolFriendlyName "POOLRAID1" -FriendlyName "RAID1" -
+ResiliencySettingName Mirror -UseMaximumSize
+Initialize-Disk -FriendlyName "RAID1"
+New-Partition -DiskNumber 3 -UseMaximumSize -DriveLetter R
+Format-Volume -DriveLetter R
+SRV SMB
+Install-WindowsFeature -Name FS-FileServer -IncludeManagementTools
+New-Item -Path R:\storage -ItemType Directory
+New-SmbShare -Name "SMB" -Path "R:\storage" -FullAccess "Everyone"
+6. Сервера WEB-L и WEB-R должны использовать службу,
+настроенную на SRV, для обмена файлами между собой:
+WEB-L SMB
+apt-cdrom add
+apt install -y cifs-utils
+nano /root/.smbclient
+username=Administrator
+password=Pa$$w0rd
+nano /etc/fstab
+//srv.int.demo.wsr/smb /opt/share cifs user,rw,_netdev,credentials=/root/.smbclient
+0 0
+mkdir /opt/share
+mount -a
+WEB-R SMB
+apt-cdrom add
+apt install -y cifs-utils
+nano /root/.smbclient
+username=Administrator
+password=Pa$$w0rd
+nano /etc/fstab
+//srv.int.demo.wsr/smb /opt/share cifs user,rw,_netdev,credentials=/root/.smbclient
+0 0
+mkdir /opt/share
+mount -a
+7. Выполните настройку центра сертификации на базе SRV:
+SRV ADCS
+Install-WindowsFeature -Name AD-Certificate, ADCS-Web-Enrollment -
+IncludeManagementTools
+Install-AdcsCertificationAuthority -CAType StandaloneRootCa -CACommonName
+"Demo.wsr" -force
+Install-AdcsWebEnrollment -Confirm -force
+New-SelfSignedCertificate -subject "localhost"
+Get-ChildItem cert:\LocalMachine\My
+Move-item Cert:\LocalMachine\My\XFX2DX02779XFD1F6F4X8435A5X26ED2X8DEFX95 -
+destination Cert:\LocalMachine\Webhosting\
+New-IISSiteBinding -Name 'Default Web Site' -BindingInformation "*:443:" -Protocol
+https -CertificateThumbPrint XFX2DX02779XFD1F6F4X8435A5X26ED2X8DEFX95
+Start-WebSite -Name "Default Web Site"
+Get-CACrlDistributionPoint | Remove-CACrlDistributionPoint -force
+Get-CAAuthorityInformationAccess |Remove-CAAuthorityInformationAccess -force
+Get-CAAuthorityInformationAccess |Remove-CAAuthorityInformationAccess -force
+Restart-Service CertSrc
+Инфраструктура веб-приложения.
+Данный блок подразумевает установку и настройку доступа к вебприложению, выполненному в формате контейнера Docker
+1. Образ Docker (содержащий веб-приложение) расположен на ISOобразе дополнительных материалов;
+o Выполните установку приложения AppDocker0;
+2. Пакеты для установки Docker расположены на дополнительном ISOобразе;
+3. Инструкция по работе с приложением расположена на
+дополнительном ISO-образе;
+4. Необходимо реализовать следующую инфраструктуру приложения.
+o Клиентом приложения является CLI (браузер Edge);
+o Хостинг приложения осуществляется на ВМ WEB-L и WEB-R;
+o Доступ к приложению осуществляется по DNS-имени www.demo.wsr;
+▪ Имя должно разрешаться во “внешние” адреса ВМ управления
+трафиком в обоих регионах;
+▪ При необходимости, для доступа к к приложению допускается
+реализовать реверс-прокси или трансляцию портов;
+o Доступ к приложению должен быть защищен с применением
+технологии TLS;
+▪ Необходимо обеспечить корректное доверие сертификату сайта,
+без применения “исключений” и подобных механизмов;
+o Незащищенное соединение должно переводится на защищенный
+канал автоматически;
+5. Необходимо обеспечить отказоустойчивость приложения;
+o Сайт должен продолжать обслуживание (с задержкой не более 25
+секунд) в следующих сценариях:
+▪ Отказ одной из ВМ Web
+▪ Отказ одной из ВМ управления трафиком.
+WEB-L Doc
+1. Образ Docker (содержащий веб-приложение) расположен на ISOобразе дополнительных материалов
+2. Пакеты для установки Docker расположены на дополнительном ISOобразе
+apt-cdrom add
+apt install -y docker-ce
+systemctl start docker
+systemctl enable docker
+mkdir /mnt/app
+mount /dev/sr1 /mnt/app
+docker load < /mnt/app/app.tar
+docker images
+docker run --name app -p 8080:80 -d app
+docker ps
+WEB-R Doc
+apt-cdrom add
+apt install -y docker-ce
+systemctl start docker
+systemctl enable docker
+mkdir /mnt/app
+mount /dev/sr1 /mnt/app
+docker load < /mnt/app/app.tar
+docker images
+docker run --name app -p 8080:80 -d app
+docker ps
+RTR-L
+no ip http secure-server
+wr
+reload
+ip nat inside source static tcp 192.168.100.100 80 4.4.4.100 80
+ip nat inside source static tcp 192.168.100.100 443 4.4.4.100 443
+RTR-R
+no ip http secure-server
+wr
+reload
+ip nat inside source static tcp 172.16.100.100 80 5.5.5.100 80
+ip nat inside source static tcp 172.16.100.100 443 5.5.5.100 443
+3. Инструкция по работе с приложением расположена на
+дополнительном ISO-образе
+В данной момент инструкции к приложению нет, приложением является
+однастраничный сайт
+4. Необходимо реализовать следующую инфраструктуру приложения
+SRV ssl
+WEB-L ssl
+apt install -y nginx
+cd /opt/share
+openssl pkcs12 -nodes -nocerts -in www.pfx -out www.key
+openssl pkcs12 -nodes -nokeys -in www.pfx -out www.cer
+cp /opt/share/www.key /etc/nginx/www.key
+cp /opt/share/www.cer /etc/nginx/www.cer
+nano /etc/nginx/snippets/snakeoil.conf
+nano /etc/nginx/sites-available/default
+upstream backend {
+server 192.168.100.100:8080 fail_timeout=25;
+server 172.16.100.100:8080 fail_timeout=25;
+}
+server {
+ listen 443 ssl default_server;
+ include snippers/snakeoil.conf;
+ server_name www.demo.wsr;
+location / {
+ proxy_pass http://backend ;
+}
+}
+server {
+ listen 80 default_server;
+ server_name _;
+ return 301 https://www.demo.wsr;
+}
+systemctl reload nginx
+WEB-R ssl
+apt install -y nginx
+cd /opt/share
+openssl pkcs12 -nodes -nocerts -in www.pfx -out www.key
+openssl pkcs12 -nodes -nokeys -in www.pfx -out www.cer
+cp /opt/share/www.key /etc/nginx/www.key
+cp /opt/share/www.cer /etc/nginx/www.cer
+nano /etc/nginx/snippets/snakeoil.conf
+nano /etc/nginx/sites-available/default
+upstream backend {
+server 192.168.100.100:8080 fail_timeout=25;
+server 172.16.100.100:8080 fail_timeout=25;
+}
+server {
+ listen 443 ssl default_server;
+ include snippers/snakeoil.conf;
+ server_name www.demo.wsr;
+location / {
+ proxy_pass http://backend ;
+}
+}
+server {
+ listen 80 default_server;
+ server_name _;
+ return 301 https://www.demo.wsr;
+}
+systemctl reload nginx
+WEB-R ssl
+ssh
+nano /etc/ssh/sshd_config
+systemctl restart sshd
+CLI ssl
+scp -P 2244 'root@5.5.5.100:/opt/share/ca.cer' C:\Users\user\Desktop\
+
