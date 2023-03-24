@@ -1,0 +1,27 @@
+установка с диска:
+1) Создать директории
+mkdir /opt/docker_files
+mkdir /files/
+mkdir /mnt/app/
+
+2) Записать с диска в папку
+mount /dev/sr1 /opt/docker_files/
+
+3) скопировать файлы в папки
+cp /opt/docker_files/d* /opt/docker_files/con* /opt/docker_files/ip* /files/
+cp /opt/docker_files/appdocker0.zip /opt/docker_files/Readme.txt
+
+4) установить докер CE из папки
+apt install -y /files/*
+
+5) установить приложение с контейннером
+docker load < /mnt/app/appdocker0.zip
+
+6) запустить службы докера
+systemctl start docker
+systemctl enable docker
+
+7) запустить приложение на порту
+docker run --name appdocker0 -p 8080:80 -d appdocker0
+
+8) проверка: docker ps
